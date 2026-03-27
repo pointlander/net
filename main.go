@@ -133,13 +133,6 @@ func main() {
 		fmt.Println(sample)
 	}
 
-	s := make([][]float64, 10)
-	for i := range s {
-		for range 150 {
-			s[i] = append(s[i], rng.Float64())
-		}
-	}
-
 	count := 0.0
 	counts := make([]float64, 10)
 	for i := range iris {
@@ -150,12 +143,10 @@ func main() {
 	}
 	index := 0
 	for range 1024 * 1024 {
-		/*samples := make([]float64, len(iris[index].Links))
+		samples := make([]float64, len(iris[index].Links))
 		for i := range samples {
 			samples[i] = rng.Float64()
-		}*/
-		ss := index % 10
-		samples := s[ss]
+		}
 		sum := 0.0
 		for _, label := range iris[index].Links {
 			sum += label //+ samples[i]
@@ -171,15 +162,17 @@ func main() {
 		}
 		iris[link].Count++
 		count++
-		//iris[link].Embed[int(10*samples[link])]++
-		//counts[int(10*samples[link])]++
-		iris[link].Embed[ss]++
-		counts[ss]++
+		iris[link].Embed[int(10*samples[link])]++
+		counts[int(10*samples[link])]++
 		index = link
 	}
 
+	sort.Slice(iris, func(i, j int) bool {
+		return iris[i].Count < iris[j].Count
+	})
+
 	for i := range iris {
-		fmt.Printf("(%f) ", iris[i].Count/count)
+		fmt.Printf("%s (%f) ", iris[i].Label, iris[i].Count/count)
 		for j := range iris[i].Embed {
 			fmt.Printf("%f ", iris[i].Embed[j]/counts[j])
 		}
