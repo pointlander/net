@@ -11,6 +11,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -22,8 +23,11 @@ var Iris embed.FS
 // Fisher is the fisher iris data
 type Fisher struct {
 	Measures []float64
+	Count    float64
+	Embed    [10]float64
 	Label    string
 	Index    int
+	Links    []float64
 }
 
 // Labels maps iris labels to ints
@@ -90,9 +94,29 @@ func Load() []Fisher {
 	return fisher
 }
 
+// Dot is the dot product
+func Dot(a, b []float64) float64 {
+	sum := 0.0
+	for i, value := range a {
+		sum += value * b[i]
+	}
+	return sum
+}
+
+// CS implements cosine similarity
+func CS(a, b []float64) float64 {
+	ab := Dot(a, b)
+	aa := Dot(a, a)
+	bb := Dot(b, b)
+	if aa == 0 || bb == 0 {
+		return 0
+	}
+	return ab / (math.Sqrt(aa) * math.Sqrt(bb))
+}
+
 func main() {
 	iris := Load()
-	_ = iris
+
 	rng := rand.New(rand.NewSource(1))
 	samples := make([]float64, 0, 8)
 	for range 33 {
@@ -107,5 +131,58 @@ func main() {
 	})
 	for _, sample := range samples {
 		fmt.Println(sample)
+	}
+
+	s := make([][]float64, 10)
+	for i := range s {
+		for range 150 {
+			s[i] = append(s[i], rng.Float64())
+		}
+	}
+
+	count := 0.0
+	counts := make([]float64, 10)
+	for i := range iris {
+		for j := range iris {
+			iris[i].Links = append(iris[i].Links, math.Abs(CS(iris[i].Measures, iris[j].Measures)))
+		}
+		fmt.Println(iris[i].Links)
+	}
+	index := 0
+	for range 1024 * 1024 {
+		/*samples := make([]float64, len(iris[index].Links))
+		for i := range samples {
+			samples[i] = rng.Float64()
+		}*/
+		ss := index % 10
+		samples := s[ss]
+		sum := 0.0
+		for _, label := range iris[index].Links {
+			sum += label //+ samples[i]
+		}
+		_ = samples
+		link, selected, total := 0, rng.Float64(), 0.0
+		for i, label := range iris[index].Links {
+			total += (label /*+ samples[i]*/) / sum
+			if selected < total {
+				link = i
+				break
+			}
+		}
+		iris[link].Count++
+		count++
+		//iris[link].Embed[int(10*samples[link])]++
+		//counts[int(10*samples[link])]++
+		iris[link].Embed[ss]++
+		counts[ss]++
+		index = link
+	}
+
+	for i := range iris {
+		fmt.Printf("(%f) ", iris[i].Count/count)
+		for j := range iris[i].Embed {
+			fmt.Printf("%f ", iris[i].Embed[j]/counts[j])
+		}
+		fmt.Println()
 	}
 }
