@@ -15,6 +15,8 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+
+	"github.com/pointlander/net/kmeans"
 )
 
 //go:embed iris.zip
@@ -24,10 +26,11 @@ var Iris embed.FS
 type Fisher struct {
 	Measures []float64
 	Count    float64
-	Embed    [10]float64
+	Embed    [150]float64
 	Label    string
 	Index    int
 	Links    []float64
+	Cluster  int
 }
 
 // Labels maps iris labels to ints
@@ -134,7 +137,7 @@ func main() {
 	}
 
 	count := 0.0
-	counts := make([]float64, 10)
+	counts := make([]float64, 150)
 	for i := range iris {
 		for j := range iris {
 			iris[i].Links = append(iris[i].Links, math.Abs(CS(iris[i].Measures, iris[j].Measures)))
@@ -142,7 +145,7 @@ func main() {
 		fmt.Println(iris[i].Links)
 	}
 	index := 0
-	for range 1024 * 1024 {
+	for range 8 * 1024 * 1024 {
 		samples := make([]float64, len(iris[index].Links))
 		for i := range samples {
 			samples[i] = rng.Float64()
@@ -162,20 +165,77 @@ func main() {
 		}
 		iris[link].Count++
 		count++
-		iris[link].Embed[int(10*samples[link])]++
-		counts[int(10*samples[link])]++
+		type Sample struct {
+			Sample float64
+			Index  int
+		}
+		s := make([]Sample, len(iris[index].Links))
+		for i, label := range iris[index].Links {
+			s[i].Sample = label
+			s[i].Index = i
+		}
+		sort.Slice(s, func(i, j int) bool {
+			return s[i].Sample < s[j].Sample
+		})
+		l := 0
+		for i, value := range s {
+			if value.Index == link {
+				l = i
+				break
+			}
+		}
+		iris[link].Embed[l]++
+		counts[l]++
 		index = link
 	}
 
+	meta := make([][]float64, len(iris))
+	for i := range meta {
+		meta[i] = make([]float64, len(iris))
+	}
+	const k = 3
+
+	{
+		vectors := make([][]float64, len(iris))
+		for i := range vectors {
+			vector := make([]float64, len(iris))
+			for ii := range iris[i].Embed {
+				vector[ii] = iris[i].Embed[ii] / counts[ii]
+			}
+			vectors[i] = vector
+		}
+		for i := 0; i < 33; i++ {
+			clusters, _, err := kmeans.Kmeans(int64(i+1), vectors, k, kmeans.SquaredEuclideanDistance, -1)
+			if err != nil {
+				panic(err)
+			}
+			for i := 0; i < len(meta); i++ {
+				target := clusters[i]
+				for j, v := range clusters {
+					if v == target {
+						meta[i][j]++
+					}
+				}
+			}
+		}
+	}
+	clusters, _, err := kmeans.Kmeans(1, meta, 3, kmeans.SquaredEuclideanDistance, -1)
+	if err != nil {
+		panic(err)
+	}
+	for i := range clusters {
+		iris[i].Cluster = clusters[i]
+	}
+
 	sort.Slice(iris, func(i, j int) bool {
-		return iris[i].Count < iris[j].Count
+		return iris[i].Cluster < iris[j].Cluster
 	})
 
 	for i := range iris {
 		fmt.Printf("%s (%f) ", iris[i].Label, iris[i].Count/count)
-		for j := range iris[i].Embed {
+		/*for j := range iris[i].Embed {
 			fmt.Printf("%f ", iris[i].Embed[j]/counts[j])
-		}
+		}*/
 		fmt.Println()
 	}
 }
